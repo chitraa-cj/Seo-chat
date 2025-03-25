@@ -4,7 +4,7 @@ export class WebSocketService {
   private maxReconnectAttempts: number = 5;
   private reconnectTimeout: number = 5000;
   private isConnecting: boolean = false;
-  private messageQueue: Array<{message: string, reportId?: string}> = [];
+  private messageQueue: Array<{message: string, reportId?: string | null}> = [];
   private isIntentionalClose: boolean = false;
   private currentReportId: string | null = null;
 
@@ -209,7 +209,7 @@ export class WebSocketService {
     }
   }
 
-  public sendChatMessage(message: string, reportId?: string) {
+  public sendChatMessage(message: string, reportId?: string | null) {
     const data = JSON.stringify({ 
       type: 'chat',
       message,
@@ -222,7 +222,7 @@ export class WebSocketService {
       this.chatWs.send(data);
     } else {
       console.log('WebSocket not open, queueing message');
-      this.messageQueue.push({ message, reportId: reportId || this.currentReportId });
+      this.messageQueue.push({ message, reportId: reportId || (this.currentReportId || undefined) });
     }
   }
 
