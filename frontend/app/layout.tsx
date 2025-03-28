@@ -10,8 +10,8 @@ import { AuthProvider } from '@/lib/auth-context'
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "SEO Agent Chatbot",
-  description: "An interactive SEO assistant chatbot",
+  title: "SEO Chatbot",
+  description: "AI-powered SEO analysis and recommendations",
     generator: 'v0.dev'
 }
 
@@ -42,7 +42,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className={inter.className}>
+      <body className={inter.className} suppressHydrationWarning>
         <AuthProvider>
           <ThemeProvider
             attribute="class"

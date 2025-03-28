@@ -1,25 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String        @id @default(uuid())
+  email     String        @unique
   password  String
   name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  role      Role     @default(USER)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  role      Role          @default(USER)
+  chats     ChatHistory[]
 
   @@map("users")
+}
+
+model ChatHistory {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  title       String   @default("New Chat")
+  messages    Json     @default("[]") @db.JsonB
+  reportId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastMessage DateTime @default(now())
+
+  @@index([userId, lastMessage])
+  @@map("chat_history")
 }
 
 enum Role {
   USER
   ADMIN
-} 
+}

@@ -21,7 +21,7 @@ export class WebSocketService {
       const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/chat`;
       console.log('Attempting to connect to WebSocket:', wsUrl);
       
-      // Initialize Chat WebSocket
+      // Initialize WebSocket
       this.chatWs = new WebSocket(wsUrl);
       this.setupChatHandlers();
 
@@ -38,7 +38,7 @@ export class WebSocketService {
     if (!this.chatWs) return;
 
     this.chatWs.onopen = () => {
-      console.log('Chat WebSocket connected successfully');
+      console.log('WebSocket connected successfully');
       this.reconnectAttempts = 0;
       this.processMessageQueue();
       // Dispatch connected event
@@ -48,62 +48,11 @@ export class WebSocketService {
     this.chatWs.onclose = (event) => {
       // Don't log error if it's an intentional close
       if (!this.isIntentionalClose) {
-        console.log('Chat WebSocket disconnected:', {
+        console.log('WebSocket disconnected:', {
           code: event.code,
           reason: event.reason,
           wasClean: event.wasClean
         });
-        
-        // Handle specific close codes
-        switch (event.code) {
-          case 1000: // Normal closure
-            console.log('WebSocket closed normally');
-            break;
-          case 1001: // Going away
-            console.log('WebSocket connection going away');
-            break;
-          case 1002: // Protocol error
-            console.log('WebSocket protocol error');
-            break;
-          case 1003: // Unsupported data
-            console.log('WebSocket received unsupported data');
-            break;
-          case 1005: // No status received
-            console.log('WebSocket closed without status');
-            break;
-          case 1006: // Abnormal closure
-            console.log('WebSocket closed abnormally');
-            break;
-          case 1007: // Invalid frame payload data
-            console.log('WebSocket received invalid frame payload');
-            break;
-          case 1008: // Policy violation
-            console.log('WebSocket policy violation');
-            break;
-          case 1009: // Message too big
-            console.log('WebSocket message too big');
-            break;
-          case 1010: // Mandatory extension
-            console.log('WebSocket mandatory extension missing');
-            break;
-          case 1011: // Internal server error
-            console.log('WebSocket internal server error');
-            break;
-          case 1012: // Service restart
-            console.log('WebSocket service restart');
-            break;
-          case 1013: // Try again later
-            console.log('WebSocket try again later');
-            break;
-          case 1014: // Bad gateway
-            console.log('WebSocket bad gateway');
-            break;
-          case 1015: // TLS handshake
-            console.log('WebSocket TLS handshake failed');
-            break;
-          default:
-            console.log('WebSocket closed with unknown code:', event.code);
-        }
       }
 
       this.handleDisconnection();
@@ -112,19 +61,20 @@ export class WebSocketService {
     this.chatWs.onerror = (event) => {
       // Only log error if it's not an intentional close
       if (!this.isIntentionalClose) {
-        console.error('Chat WebSocket error event received');
+        console.error('WebSocket error event received');
         this.handleConnectionError('WebSocket connection error occurred');
       }
     };
 
     this.chatWs.onmessage = (event) => {
       try {
-        console.log('Received WebSocket message:', event.data);
+        console.log('Raw WebSocket message received:', event.data);
         const data = JSON.parse(event.data);
+        console.log('Parsed WebSocket message:', data);
         this.handleChatMessage(data);
       } catch (error) {
-        console.error('Error parsing chat message:', error);
-        this.handleConnectionError('Failed to parse chat message');
+        console.error('Error parsing message:', error);
+        this.handleConnectionError('Failed to parse message');
       }
     };
   }
@@ -189,19 +139,24 @@ export class WebSocketService {
     // Validate and parse URL
     try {
       const parsedUrl = new URL(extractedUrl);
-      const data = JSON.stringify({
+      const data = {
         type: 'analyze_website',
         url: parsedUrl.toString(),
         timestamp: new Date().toISOString()
-      });
+      };
       
-      console.log('Sending website analysis request:', data);
+      console.log('Preparing to send website analysis request:', data);
       
       if (this.chatWs?.readyState === WebSocket.OPEN) {
-        this.chatWs.send(data);
+        const messageStr = JSON.stringify(data);
+        console.log('Sending analysis request:', messageStr);
+        this.chatWs.send(messageStr);
       } else {
         console.log('WebSocket not open, queueing analysis request');
-        this.messageQueue.push({ message: data });
+        this.messageQueue.push({ 
+          message: JSON.stringify(data),
+          reportId: null 
+        });
       }
     } catch (error) {
       console.error('Invalid URL:', error);
@@ -210,16 +165,18 @@ export class WebSocketService {
   }
 
   public sendChatMessage(message: string, reportId?: string | null) {
-    const data = JSON.stringify({ 
+    const data = {
       type: 'chat',
       message,
       report_id: reportId || this.currentReportId
-    });
+    };
     
-    console.log('Sending WebSocket message:', data);
+    console.log('Preparing to send chat message:', data);
     
     if (this.chatWs?.readyState === WebSocket.OPEN) {
-      this.chatWs.send(data);
+      const messageStr = JSON.stringify(data);
+      console.log('Sending WebSocket message:', messageStr);
+      this.chatWs.send(messageStr);
     } else {
       console.log('WebSocket not open, queueing message');
       this.messageQueue.push({ message, reportId: reportId || (this.currentReportId || undefined) });
@@ -227,13 +184,17 @@ export class WebSocketService {
   }
 
   private handleChatMessage(data: any) {
-    console.log('Handling chat message:', data);
+    console.log('Handling message:', data);
     
     // Handle different message types
     switch (data.type) {
       case 'analysis_started':
         this.currentReportId = data.report_id;
         console.log('Analysis started with report ID:', this.currentReportId);
+        // Dispatch analysis started event
+        window.dispatchEvent(new CustomEvent('wsAnalysisStarted', { 
+          detail: { reportId: data.report_id }
+        }));
         break;
       
       case 'analysis_progress':
@@ -258,9 +219,26 @@ export class WebSocketService {
         break;
       
       case 'chat_response':
+        console.log('Dispatching chat response:', data);
         // Handle regular chat response
-        const event = new CustomEvent('wsChatMessage', { detail: data });
-        window.dispatchEvent(event);
+        window.dispatchEvent(new CustomEvent('wsChatMessage', { 
+          detail: { 
+            message: data.message,
+            timestamp: new Date().toISOString(),
+            reportId: data.report_id
+          }
+        }));
+        break;
+      
+      case 'report_data':
+        console.log('Received report data:', data);
+        // Handle report data
+        window.dispatchEvent(new CustomEvent('wsReportData', { 
+          detail: { 
+            reportId: data.report_id,
+            data: data.data
+          }
+        }));
         break;
       
       default:
