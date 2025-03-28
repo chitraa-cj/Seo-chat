@@ -1,21 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search, Image, Film, FileText, Globe } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
-
-type Message = {
-  id: string
-  content: string
-  sender: "user" | "bot"
-  timestamp: Date
-}
+import { getChatHistory } from "@/services/chat"
+import type { Message, ChatHistory } from "@/services/chat"
 
 type SidebarProps = {
   isOpen: boolean
   messages: Message[]
+  onNewChat: () => void
+  onLoadChat: (chatId: string) => Promise<void>
 }
 
 // Utility function to capitalize name
@@ -26,29 +23,51 @@ const capitalizeName = (name: string) => {
     .join(' ')
 }
 
-export default function Sidebar({ isOpen, messages }: SidebarProps) {
+export default function Sidebar({ isOpen, messages, onNewChat, onLoadChat }: SidebarProps) {
   const { user } = useAuth()
   const displayName = user?.name ? capitalizeName(user.name) : 'User'
   const [activeTab, setActiveTab] = useState<"history" | "powers">("powers")
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [hasMoreChats, setHasMoreChats] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+
+  // Load chat history when the history tab is active
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      try {
+        const { chats, totalPages } = await getChatHistory(currentPage)
+        setChatHistory(prev => [...prev, ...chats])
+        setHasMoreChats(currentPage < totalPages)
+      } catch (error) {
+        console.error('Failed to load chat history:', error)
+      }
+    }
+
+    if (activeTab === "history") {
+      loadChatHistory()
+    }
+  }, [activeTab, currentPage])
+
+  // Handle loading more chats
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMoreChats) return
+    setIsLoadingMore(true)
+    setCurrentPage(prev => prev + 1)
+    setIsLoadingMore(false)
+  }
 
   // Get unique conversations by grouping messages by day
   const getConversations = () => {
-    const userMessages = messages.filter((m) => m.sender === "user")
-    if (userMessages.length === 0) return []
+    if (!chatHistory || chatHistory.length === 0) return [];
 
-    // Group by date (simple version - in a real app you'd group by conversation)
-    const conversations: { date: string; preview: string }[] = []
-    userMessages.forEach((message) => {
-      const date = message.timestamp.toLocaleDateString()
-      if (!conversations.find((c) => c.date === date)) {
-        conversations.push({
-          date,
-          preview: message.content.substring(0, 30) + (message.content.length > 30 ? "..." : ""),
-        })
-      }
-    })
-
-    return conversations
+    return chatHistory.map((chat) => ({
+      date: new Date(chat.createdAt).toLocaleDateString(),
+      preview: chat.messages?.[0]?.content ? 
+        chat.messages[0].content.substring(0, 30) + (chat.messages[0].content.length > 30 ? "..." : "") :
+        "New Chat",
+      id: chat.id
+    }));
   }
 
   return (
@@ -67,6 +86,12 @@ export default function Sidebar({ isOpen, messages }: SidebarProps) {
             <p className="text-sm text-white">{user?.email}</p>
           </div>
         </div>
+        <Button 
+          onClick={onNewChat}
+          className="w-full mt-4 bg-primary-foreground/10 hover:bg-primary-foreground/20"
+        >
+          Start New Chat
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -133,12 +158,25 @@ export default function Sidebar({ isOpen, messages }: SidebarProps) {
 
             {getConversations().length > 0 ? (
               <div className="space-y-2">
-                {getConversations().map((convo, index) => (
-                  <div key={index} className="p-3 rounded-md hover:bg-primary-foreground/10 cursor-pointer">
+                {getConversations().map((convo) => (
+                  <div 
+                    key={convo.id} 
+                    className="p-3 rounded-md hover:bg-primary-foreground/10 cursor-pointer"
+                    onClick={() => onLoadChat(convo.id)}
+                  >
                     <div className="text-sm font-medium">{convo.date}</div>
                     <div className="text-xs text-primary-foreground/70">{convo.preview}</div>
                   </div>
                 ))}
+                {hasMoreChats && (
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                    className="w-full py-2 text-sm text-primary-foreground/70 hover:text-primary-foreground"
+                  >
+                    {isLoadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                )}
               </div>
             ) : (
               <div className="text-center text-primary-foreground/50 py-4">No conversation history yet</div>

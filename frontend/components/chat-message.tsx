@@ -1,48 +1,25 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/lib/auth-context"
+import { Message } from '@/services/chat'
 
-type Message = {
-  id: string
-  content: string
-  sender: "user" | "bot"
-  timestamp: Date
-}
-
-type ChatMessageProps = {
+interface ChatMessageProps {
   message: Message
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({ message }: ChatMessageProps) {
   const { user } = useAuth()
   const isUser = message.sender === "user"
+  const timestamp = new Date(message.timestamp).toLocaleTimeString()
 
   return (
-    <div className={`flex gap-3 mb-4 ${isUser ? 'flex-row-reverse' : ''}`}>
-      <Avatar>
-        {isUser ? (
-          <>
-            <AvatarImage src="/placeholder.svg?height=100&width=100" alt={user?.name || 'User'} />
-            <AvatarFallback>{user?.name?.[0] || 'U'}</AvatarFallback>
-          </>
-        ) : (
-          <>
-            <AvatarImage src="/bot-avatar.png" alt="AI Assistant" />
-            <AvatarFallback>AI</AvatarFallback>
-          </>
-        )}
-      </Avatar>
-      <div className={`flex flex-col ${isUser ? 'items-end' : ''}`}>
-        <div className="text-sm text-gray-500 mb-1">
-          {isUser ? user?.name || 'User' : 'AI Assistant'}
-        </div>
-        <div className={`p-3 rounded-lg ${
-          isUser ? 'bg-primary text-white' : 'bg-gray-100'
-        }`}>
-          {message.content}
-        </div>
-        <div className="text-xs mt-1 opacity-70">
-          {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-        </div>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
+      <div className={`max-w-[80%] rounded-lg p-3 ${
+        isUser ? 'bg-primary text-white' : 'bg-gray-100 text-gray-800'
+      }`}>
+        <p className="text-sm">{message.content}</p>
+        <p className={`text-xs mt-1 ${isUser ? 'text-white/70' : 'text-gray-500'}`}>
+          {timestamp}
+        </p>
       </div>
     </div>
   )
