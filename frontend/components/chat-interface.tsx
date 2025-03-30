@@ -94,7 +94,7 @@ export default function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Handle chat responses
+  // Handle WebSocket events
   useEffect(() => {
     const handleChatResponse = async (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -112,12 +112,12 @@ export default function ChatInterface() {
       const updatedMessages = Array.isArray(messages) ? [...messages, botMessage] : [botMessage];
       setMessages(updatedMessages);
 
-      // Store updated chat history - always include currentChatId to update existing chat
+      // Store updated chat history
       try {
         const updatedChat = await storeChatMessage(
           updatedMessages,
           reportId || currentReportId || undefined,
-          currentChatId || undefined // Convert null to undefined
+          currentChatId || undefined
         );
         setCurrentChatId(updatedChat.id);
       } catch (error: any) {
@@ -130,64 +130,126 @@ export default function ChatInterface() {
       setIsTyping(false);
     };
 
-    const handleAnalysisStarted = (event: CustomEvent) => {
-      console.log('Received analysis started event:', event.detail);
-      const { reportId } = event.detail;
+    const handleAnalysisStarted = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Received analysis started event:', customEvent.detail);
+      const { reportId } = customEvent.detail;
       setCurrentReportId(reportId);
       setIsAnalyzing(true);
       setIsTyping(true);
+      
+      // Add analysis started message
       const botMessage: Message = {
         sender: 'bot',
         content: 'Starting website analysis...',
         timestamp: new Date()
       };
-      setMessages((prev) => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+      setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
     };
 
-    const handleAnalysisProgress = (event: CustomEvent) => {
-      console.log('Received analysis progress event:', event.detail);
-      const { progress } = event.detail;
+    const handleAnalysisProgress = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Received analysis progress event:', customEvent.detail);
+      const { progress, message } = customEvent.detail;
       setAnalysisProgress(progress);
+      
+      // Update progress message
       const botMessage: Message = {
         sender: 'bot',
-        content: `Analysis progress: ${progress}%`,
+        content: `Analysis progress: ${progress}% - ${message || ''}`,
         timestamp: new Date()
       };
-      setMessages((prev) => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+      setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
     };
 
-    const handleAnalysisComplete = (event: CustomEvent) => {
-      console.log('Received analysis complete event:', event.detail);
-      const { reportId } = event.detail;
+    const handleMetrics = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Received metrics event:', customEvent.detail);
+      const { data } = customEvent.detail;
+      
+      // Format metrics message
+      const metricsMessage = `Analysis Metrics:
+• Analysis Time: ${data.analysis_time}
+• Word Count: ${data.word_count}
+• Link Count: ${data.link_count}`;
+      
+      const botMessage: Message = {
+        sender: 'bot',
+        content: metricsMessage,
+        timestamp: new Date()
+      };
+      setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+    };
+
+    const handleAnalysis = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Received analysis event:', customEvent.detail);
+      const { data } = customEvent.detail;
+      
+      // Use the formatted message from the WebSocket service
+      const botMessage: Message = {
+        sender: 'bot',
+        content: data.formattedMessage,
+        timestamp: new Date()
+      };
+      setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+      
+      // Reset states after analysis is complete
       setIsAnalyzing(false);
       setIsTyping(false);
       setAnalysisProgress(100);
+    };
+
+    const handleAnalysisComplete = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('Received analysis complete event:', customEvent.detail);
+      const { reportId } = customEvent.detail;
+      
+      // Reset all states
+      setIsAnalyzing(false);
+      setIsTyping(false);
+      setAnalysisProgress(100);
+      
+      // Add completion message
       const botMessage: Message = {
         sender: 'bot',
-        content: 'Website analysis complete! You can now ask questions about the website.',
+        content: 'Analysis complete! You can now ask questions about the website.',
         timestamp: new Date()
       };
-      setMessages((prev) => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+      setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
     };
 
-    const handleReportData = (event: CustomEvent) => {
-      console.log('Received report data event:', event.detail);
-      const { reportId, data } = event.detail;
-      // Store report data or handle it as needed
-      console.log('Report data for ID:', reportId, data);
+    const handleError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.error('Received error event:', customEvent.detail);
+      const { message } = customEvent.detail;
+      
+      // Add error message
+      const botMessage: Message = {
+        sender: 'bot',
+        content: `Error: ${message}`,
+        timestamp: new Date()
+      };
+      setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+      setConnectionError(message);
+      setIsAnalyzing(false);
+      setIsTyping(false);
     };
 
-    const handleConnectionError = (event: CustomEvent) => {
-      console.error('Received connection error:', event.detail);
-      setConnectionError(event.detail.message);
+    const handleConnectionError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.error('Received connection error:', customEvent.detail);
+      setConnectionError(customEvent.detail.message);
     };
 
     // Add event listeners
     window.addEventListener('wsChatMessage', handleChatResponse as EventListener);
     window.addEventListener('wsAnalysisStarted', handleAnalysisStarted as EventListener);
     window.addEventListener('wsAnalysisProgress', handleAnalysisProgress as EventListener);
+    window.addEventListener('wsMetrics', handleMetrics as EventListener);
+    window.addEventListener('wsAnalysis', handleAnalysis as EventListener);
     window.addEventListener('wsAnalysisComplete', handleAnalysisComplete as EventListener);
-    window.addEventListener('wsReportData', handleReportData as EventListener);
+    window.addEventListener('wsError', handleError as EventListener);
     window.addEventListener('wsConnectionError', handleConnectionError as EventListener);
 
     // Cleanup event listeners
@@ -195,8 +257,10 @@ export default function ChatInterface() {
       window.removeEventListener('wsChatMessage', handleChatResponse as EventListener);
       window.removeEventListener('wsAnalysisStarted', handleAnalysisStarted as EventListener);
       window.removeEventListener('wsAnalysisProgress', handleAnalysisProgress as EventListener);
+      window.removeEventListener('wsMetrics', handleMetrics as EventListener);
+      window.removeEventListener('wsAnalysis', handleAnalysis as EventListener);
       window.removeEventListener('wsAnalysisComplete', handleAnalysisComplete as EventListener);
-      window.removeEventListener('wsReportData', handleReportData as EventListener);
+      window.removeEventListener('wsError', handleError as EventListener);
       window.removeEventListener('wsConnectionError', handleConnectionError as EventListener);
     };
   }, [messages, currentReportId, currentChatId]);
@@ -220,12 +284,12 @@ export default function ChatInterface() {
     const updatedMessages = Array.isArray(messages) ? [...messages, userMessage] : [userMessage];
     setMessages(updatedMessages);
 
-    // Store updated chat history - always include currentChatId to update existing chat
+    // Store updated chat history
     try {
       const updatedChat = await storeChatMessage(
         updatedMessages,
         currentReportId || undefined,
-        currentChatId || undefined // Convert null to undefined
+        currentChatId || undefined
       );
       setCurrentChatId(updatedChat.id);
     } catch (error: any) {
@@ -240,18 +304,121 @@ export default function ChatInterface() {
     const match = message.match(urlRegex);
     
     if (match) {
-      // Start website analysis
-      setIsTyping(true);
-      setIsAnalyzing(true);
-      console.log('Starting website analysis for:', message);
-      analyzeWebsite(message);
+      const url = match[0];
+      // Check if it's a request for SEO report
+      const isReportRequest = message.toLowerCase().includes('seo report') || 
+                            message.toLowerCase().includes('analyze') ||
+                            message.toLowerCase().includes('report');
+      
+      if (isReportRequest) {
+        // Verify WebSocket connection before starting analysis
+        if (!isConnected) {
+          const errorMessage = 'WebSocket connection not available. Please try again.';
+          console.error(errorMessage);
+          setConnectionError(errorMessage);
+          
+          // Add error message to chat
+          const botMessage: Message = {
+            sender: 'bot',
+            content: errorMessage,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, botMessage]);
+          return;
+        }
+
+        // Start comprehensive website analysis
+        setIsTyping(true);
+        setIsAnalyzing(true);
+        setAnalysisProgress(0);
+        console.log('Starting comprehensive website analysis for:', url);
+        
+        try {
+          // Send analysis request through WebSocket
+          analyzeWebsite(url);
+          
+          // Add initial bot message about starting analysis
+          const botMessage: Message = {
+            sender: 'bot',
+            content: `Starting comprehensive SEO analysis for ${url}. This may take a few minutes...`,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, botMessage]);
+        } catch (error) {
+          console.error('Failed to start website analysis:', error);
+          const errorMessage = 'Failed to start website analysis. Please try again.';
+          setConnectionError(errorMessage);
+          
+          // Add error message to chat
+          const botMessage: Message = {
+            sender: 'bot',
+            content: errorMessage,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, botMessage]);
+          setIsAnalyzing(false);
+          setIsTyping(false);
+        }
+      } else {
+        // Handle regular URL message
+        if (!isConnected) {
+          const errorMessage = 'WebSocket connection not available. Please try again.';
+          console.error(errorMessage);
+          setConnectionError(errorMessage);
+          
+          // Add error message to chat
+          const botMessage: Message = {
+            sender: 'bot',
+            content: errorMessage,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, botMessage]);
+          return;
+        }
+
+        setIsTyping(true);
+        console.log('Processing URL message:', message);
+        sendChatMessage(message, currentReportId || undefined);
+      }
     } else {
-      // Send regular chat message
+      // Handle regular chat message
+      if (!isConnected) {
+        const errorMessage = 'WebSocket connection not available. Please try again.';
+        console.error(errorMessage);
+        setConnectionError(errorMessage);
+        
+        // Add error message to chat
+        const botMessage: Message = {
+          sender: 'bot',
+          content: errorMessage,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botMessage]);
+        return;
+      }
+
       setIsTyping(true);
-      console.log('Sending chat message:', message, 'with report ID:', currentReportId);
+      console.log('Sending regular chat message:', message);
       sendChatMessage(message, currentReportId || undefined);
     }
   }
+
+  // Add WebSocket connection status monitoring
+  useEffect(() => {
+    const checkConnection = () => {
+      if (!isConnected) {
+        console.warn('WebSocket connection lost. Attempting to reconnect...');
+        // You might want to trigger a reconnection here
+      }
+    };
+
+    // Check connection status every 30 seconds
+    const connectionCheckInterval = setInterval(checkConnection, 30000);
+
+    return () => {
+      clearInterval(connectionCheckInterval);
+    };
+  }, [isConnected]);
 
   // Handle suggestion click
   const handleSuggestionClick = (suggestion: string) => {
@@ -423,9 +590,11 @@ export default function ChatInterface() {
           {/* Chat messages */}
           {Array.isArray(messages) && messages.map((message, index) => {
             const timestamp = new Date(message.timestamp);
+            // Create a unique key using multiple properties
+            const messageKey = `${message.sender}-${timestamp.getTime()}-${index}-${message.content.substring(0, 10)}`;
             return (
               <ChatMessage 
-                key={`${message.sender}-${timestamp.getTime()}-${index}`} 
+                key={messageKey}
                 message={{
                   ...message,
                   timestamp

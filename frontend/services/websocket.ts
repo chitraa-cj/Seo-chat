@@ -183,6 +183,56 @@ export class WebSocketService {
     }
   }
 
+  private formatAnalysisMessage(data: any): string {
+    const { url, analysis, metrics } = data;
+    
+    // Format the analysis content
+    const formattedAnalysis = analysis
+      .replace(/##/g, '\n\n###') // Convert markdown headers to new sections
+      .replace(/#/g, '') // Remove single # headers
+      .replace(/\n\n+/g, '\n\n') // Remove extra newlines
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markdown
+      .replace(/(\d+\.)\s/g, '\n$1 ') // Add newline before numbered points
+      .trim();
+
+    // Format metrics
+    const formattedMetrics = Object.entries(metrics)
+      .map(([key, value]) => {
+        const formattedKey = key
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        return `• ${formattedKey}: ${value}`;
+      })
+      .join('\n');
+
+    // Extract recommendations
+    const recommendations = analysis.match(/### 8\. Top 3 Prioritized Action Items\n([\s\S]*?)(?=###|$)/)?.[1] || '';
+    const formattedRecommendations = recommendations
+      .split('\n')
+      .filter((line: string) => line.trim().match(/^\d+\./))
+      .map((line: string) => line.replace(/^\d+\.\s*/, ''))
+      .join('\n• ');
+
+    // Extract SEO score
+    const seoScore = analysis.match(/Overall SEO Score\s+(\d+)\/100/)?.[1] || 'N/A';
+
+    // Create the final formatted message
+    return `🔍 SEO Analysis Report for ${url}
+
+${formattedAnalysis}
+
+📊 Analysis Metrics:
+${formattedMetrics}
+
+💡 Key Recommendations:
+• ${formattedRecommendations}
+
+🎯 Overall SEO Score: ${seoScore}/100
+
+✅ Analysis complete! You can now ask questions about the website.`;
+  }
+
   private handleChatMessage(data: any) {
     console.log('Handling message:', data);
     
@@ -199,15 +249,41 @@ export class WebSocketService {
       
       case 'analysis_progress':
         console.log('Analysis progress:', data.progress);
-        // Dispatch progress event
+        // Dispatch progress event with message
         window.dispatchEvent(new CustomEvent('wsAnalysisProgress', { 
-          detail: { progress: data.progress, reportId: data.report_id }
+          detail: { 
+            progress: data.progress, 
+            message: data.message,
+            reportId: data.report_id 
+          }
         }));
         break;
       
-      case 'analysis_complete':
-        console.log('Analysis complete:', data.report_id);
-        // Dispatch completion event
+      case 'metrics':
+        console.log('Received metrics:', data.data);
+        // Dispatch metrics event
+        window.dispatchEvent(new CustomEvent('wsMetrics', { 
+          detail: { 
+            data: data.data,
+            reportId: data.report_id
+          }
+        }));
+        break;
+      
+      case 'analysis':
+        console.log('Received analysis:', data.data);
+        // Format and dispatch analysis event
+        const formattedMessage = this.formatAnalysisMessage(data.data);
+        window.dispatchEvent(new CustomEvent('wsAnalysis', { 
+          detail: { 
+            data: {
+              ...data.data,
+              formattedMessage
+            },
+            reportId: data.report_id
+          }
+        }));
+        // Automatically dispatch analysis complete after analysis is received
         window.dispatchEvent(new CustomEvent('wsAnalysisComplete', { 
           detail: { reportId: data.report_id }
         }));
@@ -215,7 +291,10 @@ export class WebSocketService {
       
       case 'analysis_error':
         console.error('Analysis error:', data.error);
-        this.handleConnectionError(data.error);
+        // Dispatch error event
+        window.dispatchEvent(new CustomEvent('wsError', { 
+          detail: { message: data.error }
+        }));
         break;
       
       case 'chat_response':
@@ -226,17 +305,6 @@ export class WebSocketService {
             message: data.message,
             timestamp: new Date().toISOString(),
             reportId: data.report_id
-          }
-        }));
-        break;
-      
-      case 'report_data':
-        console.log('Received report data:', data);
-        // Handle report data
-        window.dispatchEvent(new CustomEvent('wsReportData', { 
-          detail: { 
-            reportId: data.report_id,
-            data: data.data
           }
         }));
         break;

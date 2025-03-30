@@ -22,6 +22,16 @@ export function middleware(request: NextRequest) {
   // Define public paths that don't require authentication
   const isPublicPath = path === '/login'
 
+  // Handle chat routes
+  if (path.startsWith('/chat/')) {
+    if (!token) {
+      // If trying to access chat without authentication, redirect to login
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    // Allow access to chat routes if authenticated
+    return NextResponse.next()
+  }
+
   // Redirect logic for other paths
   if (!isPublicPath && !token) {
     // If trying to access a protected route without a token, redirect to login

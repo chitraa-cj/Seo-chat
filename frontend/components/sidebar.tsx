@@ -61,13 +61,19 @@ export default function Sidebar({ isOpen, messages, onNewChat, onLoadChat }: Sid
   const getConversations = () => {
     if (!chatHistory || chatHistory.length === 0) return [];
 
-    return chatHistory.map((chat) => ({
-      date: new Date(chat.createdAt).toLocaleDateString(),
-      preview: chat.messages?.[0]?.content ? 
-        chat.messages[0].content.substring(0, 30) + (chat.messages[0].content.length > 30 ? "..." : "") :
-        "New Chat",
-      id: chat.id
-    }));
+    return chatHistory.map((chat) => {
+      // Find the first user message in the chat
+      const firstUserMessage = chat.messages?.find(msg => msg.sender === 'user');
+      const preview = firstUserMessage 
+        ? firstUserMessage.content.substring(0, 30) + (firstUserMessage.content.length > 30 ? "..." : "")
+        : "New Chat";
+
+      return {
+        date: new Date(chat.createdAt).toLocaleDateString(),
+        preview,
+        id: chat.id
+      };
+    });
   }
 
   return (
