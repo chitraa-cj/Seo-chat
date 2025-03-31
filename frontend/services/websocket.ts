@@ -24,15 +24,31 @@ export class WebSocketService {
         throw new Error('NEXT_PUBLIC_WS_URL environment variable is not set');
       }
 
-      const fullWsUrl = `${wsUrl}/chat`;
+      // Ensure the URL starts with ws:// or wss://
+      const fullWsUrl = wsUrl.startsWith('ws://') || wsUrl.startsWith('wss://') 
+        ? `${wsUrl}/chat`
+        : `ws://${wsUrl}/chat`;
+
       console.log('Environment variables:', {
         NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
         NODE_ENV: process.env.NODE_ENV
       });
       console.log('Attempting to connect to WebSocket:', fullWsUrl);
       
-      // Initialize WebSocket
-      this.chatWs = new WebSocket(fullWsUrl);
+      // Initialize WebSocket with error handling
+      try {
+        this.chatWs = new WebSocket(fullWsUrl);
+      } catch (wsError) {
+        console.error('Failed to create WebSocket:', wsError);
+        // Try fallback to non-secure connection if secure fails
+        if (fullWsUrl.startsWith('wss://')) {
+          const fallbackUrl = fullWsUrl.replace('wss://', 'ws://');
+          console.log('Attempting fallback to non-secure connection:', fallbackUrl);
+          this.chatWs = new WebSocket(fallbackUrl);
+        } else {
+          throw wsError;
+        }
+      }
       
       // Add connection timeout
       const connectionTimeout = setTimeout(() => {
@@ -57,9 +73,18 @@ export class WebSocketService {
         // Prevent error from propagating to React's error boundary
         try {
           console.log('WebSocket error event received:', event);
-          this.handleConnectionError('WebSocket connection error occurred');
+          // Try fallback to non-secure connection if secure fails
+          if (this.chatWs?.url.startsWith('wss://')) {
+            const fallbackUrl = this.chatWs.url.replace('wss://', 'ws://');
+            console.log('Attempting fallback to non-secure connection:', fallbackUrl);
+            this.chatWs = new WebSocket(fallbackUrl);
+            this.setupChatHandlers();
+          } else {
+            this.handleConnectionError('WebSocket connection error occurred');
+          }
         } catch (error) {
           console.log('Error in WebSocket error handler:', error);
+          this.handleConnectionError('WebSocket connection error occurred');
         }
       };
 
