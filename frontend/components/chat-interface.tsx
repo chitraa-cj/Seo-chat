@@ -236,10 +236,14 @@ export default function ChatInterface() {
       setIsTyping(false);
     };
 
-    const handleConnectionError = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      console.error('Received connection error:', customEvent.detail);
-      setConnectionError(customEvent.detail.message);
+    const handleConnectionError = (event: CustomEvent) => {
+      try {
+        const message = event.detail?.message || 'Connection error occurred';
+        setConnectionError(message);
+        setIsLoadingHistory(false);
+      } catch (error) {
+        console.log('Error in handleConnectionError:', error);
+      }
     };
 
     // Add event listeners

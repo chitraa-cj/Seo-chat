@@ -52,10 +52,15 @@ export class WebSocketService {
         window.dispatchEvent(new CustomEvent('wsConnected'));
       };
 
-      this.chatWs.onerror = (error) => {
+      this.chatWs.onerror = (event) => {
         clearTimeout(connectionTimeout);
-        console.error('WebSocket error:', error);
-        this.handleConnectionError('WebSocket connection error occurred');
+        // Prevent error from propagating to React's error boundary
+        try {
+          console.log('WebSocket error event received:', event);
+          this.handleConnectionError('WebSocket connection error occurred');
+        } catch (error) {
+          console.log('Error in WebSocket error handler:', error);
+        }
       };
 
       this.isConnecting = false;
@@ -139,15 +144,23 @@ export class WebSocketService {
   }
 
   private handleConnectionError(message: string) {
-    this.isConnecting = false;
-    this.notifyConnectionError(message);
+    try {
+      this.isConnecting = false;
+      this.notifyConnectionError(message);
+    } catch (error) {
+      console.log('Error in handleConnectionError:', error);
+    }
   }
 
   private notifyConnectionError(message: string) {
-    const event = new CustomEvent('wsConnectionError', {
-      detail: { message }
-    });
-    window.dispatchEvent(event);
+    try {
+      const event = new CustomEvent('wsConnectionError', {
+        detail: { message }
+      });
+      window.dispatchEvent(event);
+    } catch (error) {
+      console.log('Error in notifyConnectionError:', error);
+    }
   }
 
   private processMessageQueue() {
