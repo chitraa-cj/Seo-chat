@@ -22,7 +22,12 @@ const validateOrigin = (origin: string | undefined, callback: (err: Error | null
   }
 
   const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? [process.env.FRONTEND_URL].filter(Boolean) // Remove undefined/empty values
+    ? [
+        process.env.FRONTEND_URL,
+        'https://seo-chat.vercel.app',
+        'https://seo-chat-chitraa-cjs-projects.vercel.app',
+        'https://seo-chat-git-main-chitraa-cjs-projects.vercel.app'
+      ].filter(Boolean) // Remove undefined/empty values
     : ['http://localhost:3000'];
 
   if (allowedOrigins.includes(origin)) {
