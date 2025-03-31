@@ -10,6 +10,7 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const auth_1 = __importDefault(require("./routes/auth"));
+const chat_1 = __importDefault(require("./routes/chat"));
 var client_1 = require("./client");
 Object.defineProperty(exports, "AuthClient", { enumerable: true, get: function () { return client_1.AuthClient; } });
 // Load environment variables
@@ -23,7 +24,12 @@ const validateOrigin = (origin, callback) => {
         return;
     }
     const allowedOrigins = process.env.NODE_ENV === 'production'
-        ? [process.env.FRONTEND_URL].filter(Boolean) // Remove undefined/empty values
+        ? [
+            process.env.FRONTEND_URL,
+            'https://seo-chat.vercel.app',
+            'https://seo-chat-chitraa-cjs-projects.vercel.app',
+            'https://seo-chat-git-main-chitraa-cjs-projects.vercel.app'
+        ].filter(Boolean) // Remove undefined/empty values
         : ['http://localhost:3000'];
     if (allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -45,6 +51,7 @@ app.use((0, morgan_1.default)('dev'));
 app.use(express_1.default.json());
 // Routes
 app.use('/auth', auth_1.default);
+app.use('/chat', chat_1.default);
 // Error handling middleware
 app.use((err, _req, res, _next) => {
     console.error(err.stack);
