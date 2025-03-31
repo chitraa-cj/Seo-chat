@@ -18,12 +18,45 @@ export class WebSocketService {
     this.isConnecting = true;
 
     try {
-      const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/chat`;
-      console.log('Attempting to connect to WebSocket:', wsUrl);
+      // Get the WebSocket URL from environment variable
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+      if (!wsUrl) {
+        throw new Error('NEXT_PUBLIC_WS_URL environment variable is not set');
+      }
+
+      const fullWsUrl = `${wsUrl}/chat`;
+      console.log('Environment variables:', {
+        NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL,
+        NODE_ENV: process.env.NODE_ENV
+      });
+      console.log('Attempting to connect to WebSocket:', fullWsUrl);
       
       // Initialize WebSocket
-      this.chatWs = new WebSocket(wsUrl);
-      this.setupChatHandlers();
+      this.chatWs = new WebSocket(fullWsUrl);
+      
+      // Add connection timeout
+      const connectionTimeout = setTimeout(() => {
+        if (this.chatWs?.readyState !== WebSocket.OPEN) {
+          console.error('WebSocket connection timeout');
+          this.handleConnectionError('Connection timeout');
+        }
+      }, 5000);
+
+      this.chatWs.onopen = () => {
+        clearTimeout(connectionTimeout);
+        console.log('WebSocket connected successfully');
+        this.setupChatHandlers();
+        this.isConnecting = false;
+        this.reconnectAttempts = 0;
+        this.processMessageQueue();
+        window.dispatchEvent(new CustomEvent('wsConnected'));
+      };
+
+      this.chatWs.onerror = (error) => {
+        clearTimeout(connectionTimeout);
+        console.error('WebSocket error:', error);
+        this.handleConnectionError('WebSocket connection error occurred');
+      };
 
       this.isConnecting = false;
       this.reconnectAttempts = 0;
@@ -89,8 +122,14 @@ export class WebSocketService {
       this.reconnectAttempts++;
       console.log(`Attempting to reconnect WebSocket (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
       
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+      if (!wsUrl) {
+        console.error('Cannot reconnect: NEXT_PUBLIC_WS_URL environment variable is not set');
+        return;
+      }
+
       setTimeout(() => {
-        this.chatWs = new WebSocket(`${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/chat`);
+        this.chatWs = new WebSocket(`${wsUrl}/chat`);
         this.setupChatHandlers();
       }, this.reconnectTimeout * this.reconnectAttempts);
     } else {
@@ -99,68 +138,24 @@ export class WebSocketService {
     }
   }
 
-  private handleConnectionError(errorMessage: string) {
+  private handleConnectionError(message: string) {
     this.isConnecting = false;
-    this.notifyConnectionError(errorMessage);
+    this.notifyConnectionError(message);
   }
 
-  private notifyConnectionError(errorMessage: string) {
-    console.error('WebSocket connection error:', errorMessage);
+  private notifyConnectionError(message: string) {
     const event = new CustomEvent('wsConnectionError', {
-      detail: { message: errorMessage }
+      detail: { message }
     });
     window.dispatchEvent(event);
   }
 
   private processMessageQueue() {
-    console.log('Processing message queue:', this.messageQueue.length, 'messages');
     while (this.messageQueue.length > 0) {
       const message = this.messageQueue.shift();
       if (message) {
-        console.log('Sending queued message:', message);
         this.sendChatMessage(message.message, message.reportId);
       }
-    }
-  }
-
-  public analyzeWebsite(url: string) {
-    // Extract URL from text using regex
-    const urlRegex = /(https?:\/\/[^\s]+)/;
-    const match = url.match(urlRegex);
-    
-    if (!match) {
-      console.error('No valid URL found in input:', url);
-      this.handleConnectionError('No valid URL found in the input');
-      return;
-    }
-
-    const extractedUrl = match[1];
-    
-    // Validate and parse URL
-    try {
-      const parsedUrl = new URL(extractedUrl);
-      const data = {
-        type: 'analyze_website',
-        url: parsedUrl.toString(),
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log('Preparing to send website analysis request:', data);
-      
-      if (this.chatWs?.readyState === WebSocket.OPEN) {
-        const messageStr = JSON.stringify(data);
-        console.log('Sending analysis request:', messageStr);
-        this.chatWs.send(messageStr);
-      } else {
-        console.log('WebSocket not open, queueing analysis request');
-        this.messageQueue.push({ 
-          message: JSON.stringify(data),
-          reportId: null 
-        });
-      }
-    } catch (error) {
-      console.error('Invalid URL:', error);
-      this.handleConnectionError('Invalid website URL provided');
     }
   }
 
@@ -183,107 +178,36 @@ export class WebSocketService {
     }
   }
 
-  private formatAnalysisMessage(data: any): string {
-    const { url, analysis, metrics } = data;
-    
-    // Format the analysis content
-    const formattedAnalysis = analysis
-      .replace(/##/g, '\n\n###') // Convert markdown headers to new sections
-      .replace(/#/g, '') // Remove single # headers
-      .replace(/\n\n+/g, '\n\n') // Remove extra newlines
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markdown
-      .replace(/(\d+\.)\s/g, '\n$1 ') // Add newline before numbered points
-      .trim();
-
-    // Format metrics
-    const formattedMetrics = Object.entries(metrics)
-      .map(([key, value]) => {
-        const formattedKey = key
-          .split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        return `• ${formattedKey}: ${value}`;
-      })
-      .join('\n');
-
-    // Extract recommendations
-    const recommendations = analysis.match(/### 8\. Top 3 Prioritized Action Items\n([\s\S]*?)(?=###|$)/)?.[1] || '';
-    const formattedRecommendations = recommendations
-      .split('\n')
-      .filter((line: string) => line.trim().match(/^\d+\./))
-      .map((line: string) => line.replace(/^\d+\.\s*/, ''))
-      .join('\n• ');
-
-    // Extract SEO score
-    const seoScore = analysis.match(/Overall SEO Score\s+(\d+)\/100/)?.[1] || 'N/A';
-
-    // Create the final formatted message
-    return `🔍 SEO Analysis Report for ${url}
-
-${formattedAnalysis}
-
-📊 Analysis Metrics:
-${formattedMetrics}
-
-💡 Key Recommendations:
-• ${formattedRecommendations}
-
-🎯 Overall SEO Score: ${seoScore}/100
-
-✅ Analysis complete! You can now ask questions about the website.`;
-  }
-
   private handleChatMessage(data: any) {
     console.log('Handling message:', data);
-    
-    // Handle different message types
+
     switch (data.type) {
       case 'analysis_started':
-        this.currentReportId = data.report_id;
-        console.log('Analysis started with report ID:', this.currentReportId);
-        // Dispatch analysis started event
+        console.log('Analysis started:', data);
         window.dispatchEvent(new CustomEvent('wsAnalysisStarted', { 
           detail: { reportId: data.report_id }
         }));
         break;
       
       case 'analysis_progress':
-        console.log('Analysis progress:', data.progress);
-        // Dispatch progress event with message
+        console.log('Analysis progress:', data);
         window.dispatchEvent(new CustomEvent('wsAnalysisProgress', { 
           detail: { 
-            progress: data.progress, 
+            progress: data.progress,
             message: data.message,
-            reportId: data.report_id 
-          }
-        }));
-        break;
-      
-      case 'metrics':
-        console.log('Received metrics:', data.data);
-        // Dispatch metrics event
-        window.dispatchEvent(new CustomEvent('wsMetrics', { 
-          detail: { 
-            data: data.data,
             reportId: data.report_id
           }
         }));
         break;
       
       case 'analysis':
-        console.log('Received analysis:', data.data);
-        // Format and dispatch analysis event
-        const formattedMessage = this.formatAnalysisMessage(data.data);
+        console.log('Analysis complete:', data);
         window.dispatchEvent(new CustomEvent('wsAnalysis', { 
           detail: { 
-            data: {
-              ...data.data,
-              formattedMessage
-            },
+            data: data.data,
             reportId: data.report_id
           }
         }));
-        // Automatically dispatch analysis complete after analysis is received
         window.dispatchEvent(new CustomEvent('wsAnalysisComplete', { 
           detail: { reportId: data.report_id }
         }));
@@ -291,7 +215,6 @@ ${formattedMetrics}
       
       case 'analysis_error':
         console.error('Analysis error:', data.error);
-        // Dispatch error event
         window.dispatchEvent(new CustomEvent('wsError', { 
           detail: { message: data.error }
         }));
@@ -299,7 +222,6 @@ ${formattedMetrics}
       
       case 'chat_response':
         console.log('Dispatching chat response:', data);
-        // Handle regular chat response
         window.dispatchEvent(new CustomEvent('wsChatMessage', { 
           detail: { 
             message: data.message,
@@ -315,7 +237,6 @@ ${formattedMetrics}
   }
 
   public disconnect() {
-    console.log('Disconnecting WebSocket...');
     this.isIntentionalClose = true;
     if (this.chatWs) {
       this.chatWs.close();
