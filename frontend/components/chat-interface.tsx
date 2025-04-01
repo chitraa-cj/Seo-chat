@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { useAuth } from "@/lib/auth-context"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { storeChatMessage, getChatHistory, ChatHistory, getChatById, Message } from '@/services/chat'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // Utility function to capitalize name
 const capitalizeName = (name: string) => {
@@ -192,10 +194,16 @@ export default function ChatInterface() {
         return;
       }
 
-      // Use the analysis data directly
+      // Format the analysis data with proper markdown structure
+      const formattedAnalysis = data.analysis
+        .replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with double newlines
+        .replace(/(\d+\.)\s/g, '\n$1 ') // Add newline before numbered lists
+        .replace(/([#]+)\s/g, '\n$1 '); // Add newline before headers
+
+      // Use the formatted analysis data
       const botMessage: Message = {
         sender: 'bot',
-        content: data.analysis,
+        content: formattedAnalysis,
         timestamp: new Date()
       };
       setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
@@ -603,13 +611,36 @@ export default function ChatInterface() {
             // Create a unique key using multiple properties
             const messageKey = `${message.sender}-${timestamp.getTime()}-${index}-${message.content.substring(0, 10)}`;
             return (
-              <ChatMessage 
-                key={messageKey}
-                message={{
-                  ...message,
-                  timestamp
-                }} 
-              />
+              <div key={messageKey} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
+                <div className={`max-w-[80%] ${message.sender === 'user' ? 'bg-primary text-white' : 'bg-gray-100'} rounded-lg p-4`}>
+                  <div className="text-sm mb-2">
+                    {message.sender === 'user' ? displayName : 'AI Assistant'} • {timestamp.toLocaleTimeString()}
+                  </div>
+                  <div className="prose prose-sm max-w-none dark:prose-invert">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h1: ({node, ...props}) => <h1 className="text-2xl font-bold mb-4" {...props} />,
+                        h2: ({node, ...props}) => <h2 className="text-xl font-bold mb-3" {...props} />,
+                        h3: ({node, ...props}) => <h3 className="text-lg font-bold mb-2" {...props} />,
+                        p: ({node, ...props}) => <p className="mb-4" {...props} />,
+                        ul: ({node, ...props}) => <ul className="list-disc pl-6 mb-4" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal pl-6 mb-4" {...props} />,
+                        li: ({node, ...props}) => <li className="mb-2" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
+                        em: ({node, ...props}) => <em className="italic" {...props} />,
+                        code: ({node, inline, className, ...props}: {node?: any; inline?: boolean; className?: string}) => 
+                          inline ? 
+                            <code className="bg-gray-200 dark:bg-gray-800 rounded px-1" {...props} /> :
+                            <code className="block bg-gray-200 dark:bg-gray-800 rounded p-2 mb-4" {...props} />,
+                        blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-gray-300 pl-4 italic mb-4" {...props} />
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              </div>
             );
           })}
 
