@@ -186,7 +186,7 @@ export default function ChatInterface() {
     const handleAnalysis = (event: Event) => {
       const customEvent = event as CustomEvent;
       console.log('Received analysis event:', customEvent.detail);
-      const { data } = customEvent.detail;
+      const { data, reportId } = customEvent.detail;
       
       // Check if data and analysis exist
       if (!data || !data.analysis) {
@@ -206,12 +206,27 @@ export default function ChatInterface() {
         content: formattedAnalysis,
         timestamp: new Date()
       };
+
+      // Update messages and report ID
       setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
+      if (reportId) {
+        setCurrentReportId(reportId);
+      }
       
       // Reset states after analysis is complete
       setIsAnalyzing(false);
       setIsTyping(false);
       setAnalysisProgress(100);
+
+      // Store the updated chat with the report ID
+      storeChatMessage(
+        Array.isArray(messages) ? [...messages, botMessage] : [botMessage],
+        reportId || currentReportId || undefined,
+        currentChatId || undefined
+      ).catch(error => {
+        console.error('Failed to store chat with report:', error);
+        setConnectionError('Failed to save analysis report');
+      });
     };
 
     const handleAnalysisComplete = (event: Event) => {
