@@ -220,6 +220,30 @@ export class WebSocketService {
     console.log('Handling message:', data);
 
     switch (data.type) {
+      case 'info':
+        console.log('Info message:', data.message);
+        window.dispatchEvent(new CustomEvent('wsInfo', { 
+          detail: { message: data.message }
+        }));
+        break;
+
+      case 'progress':
+        console.log('Progress update:', data);
+        window.dispatchEvent(new CustomEvent('wsProgress', { 
+          detail: { 
+            progress: data.progress,
+            message: data.message
+          }
+        }));
+        break;
+
+      case 'metrics':
+        console.log('Metrics received:', data);
+        window.dispatchEvent(new CustomEvent('wsMetrics', { 
+          detail: { metrics: data.data }
+        }));
+        break;
+
       case 'analysis_started':
         console.log('Analysis started:', data);
         window.dispatchEvent(new CustomEvent('wsAnalysisStarted', { 
@@ -240,15 +264,21 @@ export class WebSocketService {
       
       case 'analysis':
         console.log('Analysis complete:', data);
-        window.dispatchEvent(new CustomEvent('wsAnalysis', { 
-          detail: { 
-            data: data.data,
-            reportId: data.report_id
-          }
-        }));
-        window.dispatchEvent(new CustomEvent('wsAnalysisComplete', { 
-          detail: { reportId: data.report_id }
-        }));
+        // Ensure data.data exists before dispatching
+        if (data.data && data.data.analysis) {
+          window.dispatchEvent(new CustomEvent('wsAnalysis', { 
+            detail: { 
+              data: data.data,
+              reportId: data.report_id
+            }
+          }));
+          window.dispatchEvent(new CustomEvent('wsAnalysisComplete', { 
+            detail: { reportId: data.report_id }
+          }));
+        } else {
+          console.error('Invalid analysis data received:', data);
+          this.handleConnectionError('Invalid analysis data received');
+        }
         break;
       
       case 'analysis_error':
