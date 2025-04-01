@@ -186,10 +186,16 @@ export default function ChatInterface() {
       console.log('Received analysis event:', customEvent.detail);
       const { data } = customEvent.detail;
       
-      // Use the formatted message from the WebSocket service
+      // Check if data and analysis exist
+      if (!data || !data.analysis) {
+        console.error('Invalid analysis data received:', data);
+        return;
+      }
+
+      // Use the analysis data directly
       const botMessage: Message = {
         sender: 'bot',
-        content: data.formattedMessage,
+        content: data.analysis,
         timestamp: new Date()
       };
       setMessages(prev => Array.isArray(prev) ? [...prev, botMessage] : [botMessage]);
